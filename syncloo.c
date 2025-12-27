@@ -1,13 +1,15 @@
+#ifdef _WIN32
+#  define WIN32_LEAN_AND_MEAN
+#  define _CRT_SECURE_NO_WARNINGS
+#  include <windows.h>
+#else
+#  include <dirent.h>
+#endif
+
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#if __has_include(<dirent.h>)
-#include <dirent.h>
-#else // !__has_include(<dirent.h>)
-#error "missing dirent.h"
-#endif // __has_include(<dirent.h>)
 
 #define PATH_SEP "/"
 
@@ -16,65 +18,67 @@ static void usage() {
   abort();
 }
 
-typedef struct vstr {
-  char * data;
-  unsigned len;
-} vstr;
-void vstr_free(vstr * vs) {
-  assert(vs);
-  if (vs->data) free(vs->data);
+static void recurse_files(const char * path);
+
+static void process_path(const char * parent, const char * file, _Bool is_dir) {
+  if (strcmp(".",  file) == 0) return;
+  if (strcmp("..", file) == 0) return;
+
+  char * fullpath = malloc(strlen(parent) + strlen(file) + 2);
+  strcpy(fullpath, parent);
+  strcat(fullpath, PATH_SEP);
+  strcat(fullpath, file);
+
+  if (is_dir) {
+    recurse_files(fullpath);
+  } else {
+    puts(fullpath);
+  }
 }
-void vstr_ensure(vstr * vs, unsigned len) {
-  assert(vs);
 
-  if (vs->data && vs->len >= len) return;
-  if (vs->data) vstr_free(vs);
-
-  vs->data = malloc(len);
-  assert(vs->data);
-  vs->len = len;
-}
-
-static void list_files(const char * path) {
+static void recurse_files(const char * path) {
   assert(path);
 
   int pathlen = strlen(path);
   assert(pathlen);
 
+#ifdef _WIN32
+  char * search = malloc(pathlen + 3);
+  strcpy(search, path);
+  strcat(search, "\\*");
+
+  WIN32_FIND_DATA ffd = { 0 };
+  HANDLE h = FindFirstFile(search, &ffd);
+  if (h == INVALID_HANDLE_VALUE) {
+    fprintf(stderr, "could not find directory: %s", path);
+    abort();
+  }
+
+  do {
+    _Bool is_dir = ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY;
+    process_path(path, ffd.cFileName, is_dir);
+  } while (0 != FindNextFile(h, &ffd));
+
+  FindClose(h);
+#else
   DIR * dir = opendir(path);
   if (!dir) {
     fprintf(stderr, "could not find directory: %s", path);
     abort();
   }
 
-  vstr vs = {0};
-
   struct dirent * de;
   while ((de = readdir(dir))) {
-    const char * n = de->d_name;
-    if (strcmp(".",  n) == 0) continue;
-    if (strcmp("..", n) == 0) continue;
-
-    vstr_ensure(&vs, de->d_namlen + pathlen + 2);
-    strcpy(vs.data, path);
-    strcat(vs.data, PATH_SEP);
-    strcat(vs.data, de->d_name);
-
-    if (de->d_type == DT_DIR) {
-      list_files(vs.data);
-    } else {
-      puts(vs.data);
-    }
+    process_path(path, de->d_name, de->d_type == DT_DIR);
   }
-
-  vstr_free(&vs);
   closedir(dir);
+#endif
 }
 
 int main(int argc, char ** argv) {
   if (argc != 1) usage();
 
-  list_files(".");
+  recurse_files(".");
 
   return 0;
 }

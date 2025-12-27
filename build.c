@@ -35,10 +35,11 @@ int main(int argc, char ** argv) {
   if (argc != 1) return (usage(), 1);
 
   // TODO: support other compilers/platforms
-  char * args[] = {
-    EXE("clang"), "-Wall", "-o", EXE("syncloo"), "syncloo.c", 0
-  };
-  if (run(args)) return 1;
+  { char * args[] = { EXE("clang"), "-Wall", "-o", EXE("syncloo"), "syncloo.c", 0 };
+    if (run(args)) return 1; }
+
+  { char * args[] = { EXE("syncloo"), 0 };
+    if (run(args)) return 1; }
 
   return 0;
 }
