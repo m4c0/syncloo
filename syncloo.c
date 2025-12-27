@@ -24,10 +24,11 @@ static void usage() {
 
 static void recurse_files(const char * path);
 
-static void file_attrs(const char * path, uint64_t * mtime, uint64_t * fsize) {
+static void file_attrs(const char * path, uint64_t * mtime, uint64_t * fsize, _Bool * isdir) {
 #ifdef _WIN32
   WIN32_FILE_ATTRIBUTE_DATA attrs = { 0 };
   assert(GetFileAttributesExA(path, GetFileExInfoStandard, &attrs));
+  if (isdir) *isdir = attrs.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY;
 
   // mod-time change depending on underlying file system (NTFS/FAT/etc)
   FILETIME local = { 0 };
@@ -45,17 +46,18 @@ static void file_attrs(const char * path, uint64_t * mtime, uint64_t * fsize) {
   tmt.tm_wday  = 0;
   tmt.tm_yday  = 0;
   tmt.tm_isdst = -1;
-  *mtime = mktime(&tmt);
+  if (mtime) *mtime = mktime(&tmt);
 
   ULARGE_INTEGER ul = { 0 };
   ul.HighPart = attrs.nFileSizeHigh;
   ul.LowPart = attrs.nFileSizeLow;
-  *fsize = ul.QuadPart;
+  if (fsize) *fsize = ul.QuadPart;
 #else
   struct stat st = { 0 };
-  assert(0 == stat(path, &st));
-  *mtime = st.st_mtimespec.tv_sec;
-  *fsize = st.st_size;
+  assert(0 == stat(path, &st) && "path not found");
+  if (mtime) *mtime = st.st_mtimespec.tv_sec;
+  if (fsize) *fsize = st.st_size;
+  if (isdir) *isdir = st.st_mode & S_IFDIR;
 #endif
 }
 
@@ -96,7 +98,7 @@ static void process_path(const char * parent, const char * file, _Bool is_dir) {
 
   uint64_t loc_mtime = 0;
   uint64_t loc_fsize = 0;
-  file_attrs(fullpath, &loc_mtime, &loc_fsize);
+  file_attrs(fullpath, &loc_mtime, &loc_fsize, 0);
   if (mtime > loc_mtime) return;
 
   FILE * f = fopen(fullpath, "rb");
@@ -152,9 +154,19 @@ static void recurse_files(const char * path) {
 #endif
 }
 
+static void receive_files(const char * root) {
+  _Bool isdir = 0;
+  file_attrs(root, 0, 0, &isdir);
+  assert(isdir && "target path is not a directory");
+}
+
 int main(int argc, char ** argv) {
   if (argc == 3 && 0 == strcmp("--from", argv[1])) {
     recurse_files(argv[2]);
+    return 0;
+  }
+  if (argc == 3 && 0 == strcmp("--to", argv[1])) {
+    receive_files(argv[2]);
     return 0;
   }
 
