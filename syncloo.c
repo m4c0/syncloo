@@ -8,6 +8,7 @@
 #endif
 
 #include <assert.h>
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -80,7 +81,7 @@ static void process_path(const char * parent, const char * file, _Bool is_dir) {
 
   char id[4] = { 0 };
   assert(1 == fread(id, 4, 1, stdin));
-  assert(0 == strncmp(id, "MTIM", 4));
+  assert(0 == strncmp(id, "mtim", 4));
 
   char num[9] = { 0 };
   assert(1 == fread(num, 8, 1, stdin));
@@ -98,7 +99,18 @@ static void process_path(const char * parent, const char * file, _Bool is_dir) {
   file_attrs(fullpath, &loc_mtime, &loc_fsize);
   if (mtime > loc_mtime) return;
 
+  FILE * f = fopen(fullpath, "rb");
+  assert(f);
+
   printf("DATA%08llx%04x%s\n", loc_fsize, fpath_len, fullpath);
+
+  char buf[1024] = { 0 };
+  int rd = 0;
+  while ((rd = fread(buf, 1, 1024, f))) assert(fwrite(buf, rd, 1, stdout));
+  assert(!errno);
+  fflush(stdout);
+
+  fclose(f);
 }
 
 static void recurse_files(const char * path) {
