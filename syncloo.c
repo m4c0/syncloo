@@ -153,9 +153,12 @@ static void recurse_files(const char * path) {
 }
 
 int main(int argc, char ** argv) {
-  if (argc != 1) usage();
+  if (argc == 3 && 0 == strcmp("--from", argv[1])) {
+    recurse_files(argv[2]);
+    return 0;
+  }
 
-  recurse_files(".");
+  if (argc != 1) usage();
 
   return 0;
 }
