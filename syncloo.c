@@ -23,7 +23,7 @@ static void usage() {
 
 static void recurse_files(const char * path);
 
-static uint64_t file_mtime(const char * path) {
+static void file_attrs(const char * path, uint64_t * mtime, uint64_t * fsize) {
 #ifdef _WIN32
   WIN32_FILE_ATTRIBUTE_DATA attrs = { 0 };
   assert(GetFileAttributesExA(path, GetFileExInfoStandard, &attrs));
@@ -44,11 +44,17 @@ static uint64_t file_mtime(const char * path) {
   tmt.tm_wday  = 0;
   tmt.tm_yday  = 0;
   tmt.tm_isdst = -1;
-  return mktime(&tmt);
+  *mtime = mktime(&tmt);
+
+  ULARGE_INTEGER ul = { 0 };
+  ul.HighPart = attrs.nFileSizeHigh;
+  ul.LowPart = attrs.nFileSizeLow;
+  *fsize = ul.QuadPart;
 #else
   struct stat st = { 0 };
   assert(0 == stat(path, &st));
-  return st.st_mtimespec.tv_sec;
+  *mtime = st.st_mtimespec.tv_sec;
+  *fsize = st.st_size;
 #endif
 }
 
@@ -87,9 +93,12 @@ static void process_path(const char * parent, const char * file, _Bool is_dir) {
   if (lf == '\r') assert(1 == fread(&lf, 1, 1, stdin));
   assert(lf == '\n');
 
-  if (mtime > file_mtime(fullpath)) return;
+  uint64_t loc_mtime = 0;
+  uint64_t loc_fsize = 0;
+  file_attrs(fullpath, &loc_mtime, &loc_fsize);
+  if (mtime > loc_mtime) return;
 
-  printf("DATA%04x%s\n", fpath_len, fullpath);
+  printf("DATA%08llx%04x%s\n", loc_fsize, fpath_len, fullpath);
 }
 
 static void recurse_files(const char * path) {
