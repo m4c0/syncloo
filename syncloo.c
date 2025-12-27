@@ -4,6 +4,7 @@
 #  include <windows.h>
 #else
 #  include <dirent.h>
+#  include <sys/stat.h>
 #endif
 
 #include <assert.h>
@@ -45,7 +46,9 @@ static uint64_t file_mtime(const char * path) {
   tmt.tm_isdst = -1;
   return mktime(&tmt);
 #else
-#  error TBD
+  struct stat st = { 0 };
+  assert(0 == stat(path, &st));
+  return st.st_mtimespec.tv_sec;
 #endif
 }
 
