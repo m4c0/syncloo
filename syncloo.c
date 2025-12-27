@@ -7,9 +7,11 @@
 #endif
 
 #include <assert.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define PATH_SEP "/"
 
@@ -20,20 +22,71 @@ static void usage() {
 
 static void recurse_files(const char * path);
 
+static uint64_t file_mtime(const char * path) {
+#ifdef _WIN32
+  WIN32_FILE_ATTRIBUTE_DATA attrs = { 0 };
+  assert(GetFileAttributesExA(path, GetFileExInfoStandard, &attrs));
+
+  // mod-time change depending on underlying file system (NTFS/FAT/etc)
+  FILETIME local = { 0 };
+  FileTimeToLocalFileTime(&attrs.ftLastWriteTime, &local);
+  SYSTEMTIME sys = { 0 };
+  FileTimeToSystemTime(&local, &sys);
+
+  struct tm tmt = {0};
+  tmt.tm_year  = sys.wYear - 1900;
+  tmt.tm_mon   = sys.wMonth - 1;
+  tmt.tm_mday  = sys.wDay;
+  tmt.tm_hour  = sys.wHour;
+  tmt.tm_min   = sys.wMinute;
+  tmt.tm_sec   = sys.wSecond;
+  tmt.tm_wday  = 0;
+  tmt.tm_yday  = 0;
+  tmt.tm_isdst = -1;
+  return mktime(&tmt);
+#else
+#  error TBD
+#endif
+}
+
 static void process_path(const char * parent, const char * file, _Bool is_dir) {
   if (strcmp(".",  file) == 0) return;
   if (strcmp("..", file) == 0) return;
 
-  char * fullpath = malloc(strlen(parent) + strlen(file) + 2);
+  int fpath_len = strlen(parent) + strlen(file) + 2;
+  char * fullpath = malloc(fpath_len + 1);
   strcpy(fullpath, parent);
   strcat(fullpath, PATH_SEP);
   strcat(fullpath, file);
 
   if (is_dir) {
     recurse_files(fullpath);
-  } else {
-    puts(fullpath);
+    return;
   }
+
+  // Check remote file mod time
+
+  assert(printf("MTIM%04x%s\n", fpath_len, fullpath));
+  assert(0 == fflush(stdout));
+
+  char id[4] = { 0 };
+  assert(1 == fread(id, 4, 1, stdin));
+  assert(0 == strncmp(id, "MTIM", 4));
+
+  char num[9] = { 0 };
+  assert(1 == fread(num, 8, 1, stdin));
+  char * end = 0;
+  uint64_t mtime = strtoll(num, &end, 16);
+  assert(end && *end == 0);
+
+  char lf = 0;
+  assert(1 == fread(&lf, 1, 1, stdin));
+  if (lf == '\r') assert(1 == fread(&lf, 1, 1, stdin));
+  assert(lf == '\n');
+
+  if (mtime > file_mtime(fullpath)) return;
+
+  printf("DATA%04x%s\n", fpath_len, fullpath);
 }
 
 static void recurse_files(const char * path) {
