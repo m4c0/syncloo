@@ -116,6 +116,41 @@ static _Bool file_attrs(const char * path, uint64_t * mtime, uint64_t * fsize, _
   return 1;
 }
 
+static uint32_t crc_table[256];
+static void crc_init() {
+  for (int n = 0; n < 256; n++) {
+    uint32_t c = n;
+    for (int k = 0; k < 8; k++) {
+      if (c & 1) c = 0xedb88320 ^ (c >> 1);
+      else c >>= 1;
+    }
+    crc_table[n] = c;
+  }
+}
+static uint32_t crc_step(uint32_t crc, unsigned char * buf, unsigned len) {
+  uint32_t c = crc ^ ~0U;
+  for (int n = 0; n < len; n++) {
+    int idx = (c ^ buf[n]) & 0xFF;
+    c = crc_table[idx] ^ (c >> 8);
+  }
+  return c ^ ~0U;
+}
+static uint32_t crc_file(const char * path) {
+  FILE * f = fopen(path, "rb");
+  if (!f) return 0;
+
+  uint32_t crc = 0;
+  while (!feof(f)) {
+    unsigned char buf[1024];
+    int rd = fread(buf, 1, 1024, f);
+    if (rd > 0) crc = crc_step(crc, buf, rd);
+  }
+
+  fclose(f);
+
+  return crc;
+}
+
 static void process_path(const char * root, const char * parent, const char * file, _Bool is_dir) {
   if (strcmp(".",  file) == 0) return;
   if (strcmp("..", file) == 0) return;
@@ -262,6 +297,11 @@ static void receive_files(const char * root) {
       free(fname);
 
       write_message("data\n");
+    } else if (0 == strncmp(id, "CR32", 4)) {
+      char * fname = read_filename(root);
+      read_eol();
+
+      write_message("cr32%04x\n", crc_file(fname));
     } else {
       assert(0 && "invalid code received");
     }
@@ -371,6 +411,8 @@ int main(int argc, char ** argv) {
   // Avoids CRLF conversions on windows-like
   freopen(NULL, "rb", stdin);
   freopen(NULL, "wb", stdout);
+
+  crc_init();
 
   if (argc == 3 && 0 == strcmp("--from", argv[1])) {
     recurse_files(argv[2], argv[2]);

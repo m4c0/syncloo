@@ -67,6 +67,14 @@ On exotic systems with filesystem-dependant timestamps, these should be
 converted to Unix Epoch timestamp before being transferred.
 
 ```
+from> CR32<str-file-name>
+to  > cr32<crc-32>
+```
+
+`CR32` calculates the CRC32 of the file, using the same algorithm and
+polynomials as used in ZIP and PNG file formats.
+
+```
 from> DATA<u64-file-size><str-file-name>
 from> <file-contents>
 from>
