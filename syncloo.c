@@ -5,6 +5,7 @@
 #else
 #  include <dirent.h>
 #  include <sys/stat.h>
+#  include <unistd.h>
 #endif
 
 #include <assert.h>
@@ -215,6 +216,50 @@ static void receive_files(const char * root) {
   }
 }
 
+static int pipe_from_to(const char * argv0, const char * from, const char * to) {
+  assert(from && *from && to && *to);
+
+#ifdef _WIN32
+#error TBD
+#else
+  int from_to_fd[2];
+  assert(0 == pipe(from_to_fd));
+  assert(from_to_fd[0] && from_to_fd[1]);
+
+  int to_from_fd[2];
+  assert(0 == pipe(to_from_fd));
+  assert(to_from_fd[0] && to_from_fd[1]);
+
+  pid_t from_p = fork();
+  if (from_p == 0) {
+    close(from_to_fd[1]); dup2(from_to_fd[0], 0);
+    close(to_from_fd[1]); dup2(to_from_fd[0], 1);
+    fprintf(stdout, "from child\n");
+    exit(0);
+  } else if (from_p > 0) {
+    pid_t to_p = fork();
+    if (to_p == 0) {
+      close(from_to_fd[0]); dup2(from_to_fd[1], 0);
+      close(to_from_fd[0]); dup2(to_from_fd[1], 1);
+      fprintf(stdout, "to child\n");
+      exit(0);
+    } else if (to_p > 0) {
+      // Note: both sides should exit on their own when their respective inputs
+      // are closed
+      int sl = 0;
+      assert(0 <= waitpid(from_p, &sl, 0));
+      if (WIFEXITED(sl) && 0 == WEXITSTATUS(sl)) {
+        assert(0 <= waitpid(to_p, &sl, 0));
+        if (WIFEXITED(sl) && 0 == WEXITSTATUS(sl)) return 0;
+      }
+    }
+  }
+#endif
+
+  fprintf(stderr, "failed to run child process\n");
+  return 1;
+}
+
 int main(int argc, char ** argv) {
   if (argc == 3 && 0 == strcmp("--from", argv[1])) {
     recurse_files(argv[2]);
@@ -223,6 +268,10 @@ int main(int argc, char ** argv) {
   if (argc == 3 && 0 == strcmp("--to", argv[1])) {
     receive_files(argv[2]);
     return 0;
+  }
+
+  if (argc == 5 && 0 == strcmp("--from", argv[1]) && 0 == strcmp("--to", argv[3])) {
+    return pipe_from_to(argv[0], argv[2], argv[4]);
   }
 
   if (argc != 1) usage();

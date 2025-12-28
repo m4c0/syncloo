@@ -33,7 +33,7 @@ static int run(char ** args) {
   } else if (pid > 0) {
     int sl = 0;
     assert(0 <= waitpid(pid, &sl, 0));
-    if (WIFEXITED(sl)) return 0;
+    if (WIFEXITED(sl)) return WEXITSTATUS(sl);
   }
 #endif
 
