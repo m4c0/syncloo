@@ -18,7 +18,7 @@
 
 #define PATH_SEP "/"
 
-#if 1
+#if 0
 #  define DEBUG_PROTOCOL(...) fprintf(stderr, __VA_ARGS__);
 #else
 #  define DEBUG_PROTOCOL(...)
@@ -297,6 +297,9 @@ static int pipe_from_to(char * argv0, char * from, char * to) {
       execv(argv0, args);
       abort();
     } else if (to_p > 0) {
+      close(from_to_fd[0]); close(from_to_fd[1]);
+      close(to_from_fd[0]); close(to_from_fd[1]);
+
       // Note: both sides should exit on their own when their respective inputs
       // are closed
       int sl = 0;
