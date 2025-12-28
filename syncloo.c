@@ -310,7 +310,9 @@ static int pipe_from_to(char * argv0, char * from, char * to) {
 }
 
 int main(int argc, char ** argv) {
-  freopen(NULL, "rb", stdin); // Avoids CRLF conversions on windows-like
+  // Avoids CRLF conversions on windows-like
+  freopen(NULL, "rb", stdin);
+  freopen(NULL, "wb", stdout);
 
   if (argc == 3 && 0 == strcmp("--from", argv[1])) {
     recurse_files(argv[2], argv[2]);
