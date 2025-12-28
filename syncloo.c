@@ -22,6 +22,17 @@ static void usage() {
   abort();
 }
 
+static void read_eol() {
+  char lf = 0;
+  assert(1 == fread(&lf, 1, 1, stdin));
+  if (lf == '\r') assert(1 == fread(&lf, 1, 1, stdin));
+  assert(lf == '\n');
+}
+static void read_id(const char buf[4]) {
+  char id[4] = { 0 };
+  assert(1 == fread(id, 4, 1, stdin));
+  assert(0 == strncmp(id, buf, 4));
+}
 static uint64_t read_u64(int len) {
   assert(len <= 8);
 
@@ -35,12 +46,7 @@ static uint64_t read_u64(int len) {
 
   return res;
 }
-static void read_eol() {
-  char lf = 0;
-  assert(1 == fread(&lf, 1, 1, stdin));
-  if (lf == '\r') assert(1 == fread(&lf, 1, 1, stdin));
-  assert(lf == '\n');
-}
+
 static char * read_filename(const char * root) {
   uint64_t len = read_u64(3);
 
@@ -116,10 +122,7 @@ static void process_path(const char * parent, const char * file, _Bool is_dir) {
   assert(printf("MTIM%03x%s\n", fpath_len, fullpath));
   assert(0 == fflush(stdout));
 
-  char id[4] = { 0 };
-  assert(1 == fread(id, 4, 1, stdin));
-  assert(0 == strncmp(id, "mtim", 4));
-
+  read_id("mtim");
   uint64_t mtime = read_u64(8);
   read_eol();
 
@@ -140,6 +143,9 @@ static void process_path(const char * parent, const char * file, _Bool is_dir) {
   fflush(stdout);
 
   fclose(f);
+
+  read_id("data");
+  read_eol();
 }
 
 static void recurse_files(const char * path) {
