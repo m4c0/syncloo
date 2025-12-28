@@ -71,7 +71,7 @@ static char * read_filename(const char * root) {
   assert(0 == fflush(stdout));    \
   DEBUG_PROTOCOL(__VA_ARGS__);
 
-static void recurse_files(const char * path);
+static void recurse_files(const char * root, const char * path);
 
 static _Bool file_attrs(const char * path, uint64_t * mtime, uint64_t * fsize, _Bool * isdir) {
 #ifdef _WIN32
@@ -113,7 +113,7 @@ static _Bool file_attrs(const char * path, uint64_t * mtime, uint64_t * fsize, _
   return 1;
 }
 
-static void process_path(const char * parent, const char * file, _Bool is_dir) {
+static void process_path(const char * root, const char * parent, const char * file, _Bool is_dir) {
   if (strcmp(".",  file) == 0) return;
   if (strcmp("..", file) == 0) return;
 
@@ -122,15 +122,19 @@ static void process_path(const char * parent, const char * file, _Bool is_dir) {
   strcpy(fullpath, parent);
   strcat(fullpath, PATH_SEP);
   strcat(fullpath, file);
+  assert(0 == strncmp(root, parent, strlen(root)));
 
   if (is_dir) {
-    recurse_files(fullpath);
+    recurse_files(root, fullpath);
     return;
   }
 
+  const char * rel_file = fullpath + strlen(root) + 1;
+  unsigned rel_flen = strlen(rel_file);
+
   // Check remote file mod time
 
-  write_message("MTIM%03x%s\n", fpath_len, fullpath);
+  write_message("MTIM%03x%s\n", rel_flen, rel_file);
 
   read_id("mtim");
   uint64_t mtime = read_u64(8);
@@ -144,7 +148,7 @@ static void process_path(const char * parent, const char * file, _Bool is_dir) {
   FILE * f = fopen(fullpath, "rb");
   assert(f);
 
-  write_message("DATA%08llx%03x%s\n", loc_fsize, fpath_len, fullpath);
+  write_message("DATA%08llx%03x%s\n", loc_fsize, rel_flen, rel_file);
 
   char buf[1024] = { 0 };
   int rd = 0;
@@ -158,7 +162,7 @@ static void process_path(const char * parent, const char * file, _Bool is_dir) {
   read_eol();
 }
 
-static void recurse_files(const char * path) {
+static void recurse_files(const char * root, const char * path) {
   assert(path);
 
   int pathlen = strlen(path);
@@ -178,7 +182,7 @@ static void recurse_files(const char * path) {
 
   do {
     _Bool is_dir = ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY;
-    process_path(path, ffd.cFileName, is_dir);
+    process_path(root, path, ffd.cFileName, is_dir);
   } while (0 != FindNextFile(h, &ffd));
 
   FindClose(h);
@@ -191,7 +195,7 @@ static void recurse_files(const char * path) {
 
   struct dirent * de;
   while ((de = readdir(dir))) {
-    process_path(path, de->d_name, de->d_type == DT_DIR);
+    process_path(root, path, de->d_name, de->d_type == DT_DIR);
   }
   closedir(dir);
 #endif
@@ -295,7 +299,7 @@ int main(int argc, char ** argv) {
   freopen(NULL, "rb", stdin); // Avoids CRLF conversions on windows-like
 
   if (argc == 3 && 0 == strcmp("--from", argv[1])) {
-    recurse_files(argv[2]);
+    recurse_files(argv[2], argv[2]);
     return 0;
   }
   if (argc == 3 && 0 == strcmp("--to", argv[1])) {
