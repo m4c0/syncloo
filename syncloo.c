@@ -18,6 +18,8 @@
 
 #define PATH_SEP "/"
 
+#define DEBUG_PROTOCOL
+
 static void usage() {
   fprintf(stderr, "usage: ...");
   abort();
@@ -120,10 +122,11 @@ static void process_path(const char * parent, const char * file, _Bool is_dir) {
 
   // Check remote file mod time
 
-  fprintf(stderr, "%s\n", fullpath);
-
   assert(printf("MTIM%03x%s\n", fpath_len, fullpath));
   assert(0 == fflush(stdout));
+#ifdef DEBUG_PROTOCOL
+  fprintf(stderr, "MTIM%03x%s\n", fpath_len, fullpath);
+#endif
 
   read_id("mtim");
   uint64_t mtime = read_u64(8);
@@ -137,13 +140,17 @@ static void process_path(const char * parent, const char * file, _Bool is_dir) {
   FILE * f = fopen(fullpath, "rb");
   assert(f);
 
-  printf("DATA%08llx%03x%s\n", loc_fsize, fpath_len, fullpath);
+  assert(printf("DATA%08llx%03x%s\n", loc_fsize, fpath_len, fullpath));
+  assert(0 == fflush(stdout));
+#ifdef DEBUG_PROTOCOL
+  fprintf(stderr, "DATA%08llx%03x%s\n", loc_fsize, fpath_len, fullpath);
+#endif
 
   char buf[1024] = { 0 };
   int rd = 0;
   while ((rd = fread(buf, 1, 1024, f))) assert(fwrite(buf, rd, 1, stdout));
   assert(!errno);
-  fflush(stdout);
+  assert(0 == fflush(stdout));
 
   fclose(f);
 
@@ -206,6 +213,9 @@ static void receive_files(const char * root) {
       uint64_t loc_mtime = 0;
       file_attrs(fname, &loc_mtime, 0, 0);
       printf("mtim%08llx\n", loc_mtime);
+#ifdef DEBUG_PROTOCOL
+      fprintf(stderr, "mtim%08llx\n", loc_mtime);
+#endif
 
       free(fname);
       continue;
@@ -229,7 +239,9 @@ static void receive_files(const char * root) {
       fclose(out);
       free(fname);
 
+#ifdef DEBUG_PROTOCOL
       printf("data\n");
+#endif
       continue;
     }
 
