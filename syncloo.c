@@ -114,6 +114,8 @@ static void process_path(const char * parent, const char * file, _Bool is_dir) {
 
   // Check remote file mod time
 
+  fprintf(stderr, "%s\n", fullpath);
+
   assert(printf("MTIM%03x%s\n", fpath_len, fullpath));
   assert(0 == fflush(stdout));
 
@@ -216,7 +218,7 @@ static void receive_files(const char * root) {
   }
 }
 
-static int pipe_from_to(const char * argv0, const char * from, const char * to) {
+static int pipe_from_to(char * argv0, char * from, char * to) {
   assert(from && *from && to && *to);
 
 #ifdef _WIN32
@@ -232,17 +234,21 @@ static int pipe_from_to(const char * argv0, const char * from, const char * to) 
 
   pid_t from_p = fork();
   if (from_p == 0) {
-    close(from_to_fd[1]); dup2(from_to_fd[0], 0);
-    close(to_from_fd[1]); dup2(to_from_fd[0], 1);
-    fprintf(stdout, "from child\n");
-    exit(0);
+    close(from_to_fd[0]); dup2(from_to_fd[1], 1);
+    close(to_from_fd[1]); dup2(to_from_fd[0], 0);
+
+    char * args[] = { argv0, "--from", from, 0 };
+    execv(argv0, args);
+    abort();
   } else if (from_p > 0) {
     pid_t to_p = fork();
     if (to_p == 0) {
-      close(from_to_fd[0]); dup2(from_to_fd[1], 0);
+      close(from_to_fd[1]); dup2(from_to_fd[0], 0);
       close(to_from_fd[0]); dup2(to_from_fd[1], 1);
-      fprintf(stdout, "to child\n");
-      exit(0);
+
+      char * args[] = { argv0, "--to", to, 0 };
+      execv(argv0, args);
+      abort();
     } else if (to_p > 0) {
       // Note: both sides should exit on their own when their respective inputs
       // are closed
