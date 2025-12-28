@@ -18,7 +18,11 @@
 
 #define PATH_SEP "/"
 
-#define DEBUG_PROTOCOL
+#if 1
+#  define DEBUG_PROTOCOL(...) fprintf(stderr, __VA_ARGS__);
+#else
+#  define DEBUG_PROTOCOL(...)
+#endif
 
 static void usage() {
   fprintf(stderr, "usage: ...");
@@ -49,7 +53,6 @@ static uint64_t read_u64(int len) {
 
   return res;
 }
-
 static char * read_filename(const char * root) {
   uint64_t len = read_u64(3);
 
@@ -62,6 +65,11 @@ static char * read_filename(const char * root) {
   assert(0 == strstr(buf, ".."));
   return buf;
 }
+
+#define write_message(...)        \
+  assert(printf(__VA_ARGS__));    \
+  assert(0 == fflush(stdout));    \
+  DEBUG_PROTOCOL(__VA_ARGS__);
 
 static void recurse_files(const char * path);
 
@@ -122,11 +130,7 @@ static void process_path(const char * parent, const char * file, _Bool is_dir) {
 
   // Check remote file mod time
 
-  assert(printf("MTIM%03x%s\n", fpath_len, fullpath));
-  assert(0 == fflush(stdout));
-#ifdef DEBUG_PROTOCOL
-  fprintf(stderr, "MTIM%03x%s\n", fpath_len, fullpath);
-#endif
+  write_message("MTIM%03x%s\n", fpath_len, fullpath);
 
   read_id("mtim");
   uint64_t mtime = read_u64(8);
@@ -140,11 +144,7 @@ static void process_path(const char * parent, const char * file, _Bool is_dir) {
   FILE * f = fopen(fullpath, "rb");
   assert(f);
 
-  assert(printf("DATA%08llx%03x%s\n", loc_fsize, fpath_len, fullpath));
-  assert(0 == fflush(stdout));
-#ifdef DEBUG_PROTOCOL
-  fprintf(stderr, "DATA%08llx%03x%s\n", loc_fsize, fpath_len, fullpath);
-#endif
+  write_message("DATA%08llx%03x%s\n", loc_fsize, fpath_len, fullpath);
 
   char buf[1024] = { 0 };
   int rd = 0;
@@ -212,13 +212,10 @@ static void receive_files(const char * root) {
 
       uint64_t loc_mtime = 0;
       file_attrs(fname, &loc_mtime, 0, 0);
-      printf("mtim%08llx\n", loc_mtime);
-#ifdef DEBUG_PROTOCOL
-      fprintf(stderr, "mtim%08llx\n", loc_mtime);
-#endif
+
+      write_message("mtim%08llx\n", loc_mtime);
 
       free(fname);
-      continue;
     } else if (0 == strncmp(id, "DATA", 4)) {
       uint64_t data_len  = read_u64(8);
       char * fname = read_filename(root);
@@ -239,13 +236,10 @@ static void receive_files(const char * root) {
       fclose(out);
       free(fname);
 
-#ifdef DEBUG_PROTOCOL
-      printf("data\n");
-#endif
-      continue;
+      write_message("data\n");
+    } else {
+      assert(0 && "invalid code received");
     }
-
-    assert(0 && "invalid code received");
   }
 }
 
