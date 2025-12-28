@@ -1,5 +1,7 @@
 #ifdef _WIN32
 #include <process.h>
+#else
+#include <unistd.h>
 #endif
 
 #include <assert.h>
@@ -24,10 +26,18 @@ static int run(char ** args) {
     return 0;
   }
 #else
-#error TODO: implement fork+execv
+  pid_t pid = fork();
+  if (pid == 0) {
+    execvp(args[0], args);
+    abort();
+  } else if (pid > 0) {
+    int sl = 0;
+    assert(0 <= waitpid(pid, &sl, 0));
+    if (WIFEXITED(sl)) return WEXITSTATUS(sl);
+  }
 #endif
 
-  fprintf(stderr, "failed to run child process\n");
+  fprintf(stderr, "failed to run child process: %s\n", args[0]);
   return 1;
 }
 
@@ -38,7 +48,7 @@ int main(int argc, char ** argv) {
   { char * args[] = { EXE("clang"), "-Wall", "-o", EXE("syncloo"), "syncloo.c", 0 };
     if (run(args)) return 1; }
 
-  { char * args[] = { EXE("syncloo"), 0 };
+  { char * args[] = { EXE("./syncloo"), 0 };
     if (run(args)) return 1; }
 
   return 0;

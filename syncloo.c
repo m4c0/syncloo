@@ -5,6 +5,7 @@
 #else
 #  include <dirent.h>
 #  include <sys/stat.h>
+#  include <unistd.h>
 #endif
 
 #include <assert.h>
@@ -118,6 +119,8 @@ static void process_path(const char * parent, const char * file, _Bool is_dir) {
   }
 
   // Check remote file mod time
+
+  fprintf(stderr, "%s\n", fullpath);
 
   assert(printf("MTIM%03x%s\n", fpath_len, fullpath));
   assert(0 == fflush(stdout));
@@ -234,6 +237,54 @@ static void receive_files(const char * root) {
   }
 }
 
+static int pipe_from_to(char * argv0, char * from, char * to) {
+  assert(from && *from && to && *to);
+
+#ifdef _WIN32
+#error TBD
+#else
+  int from_to_fd[2];
+  assert(0 == pipe(from_to_fd));
+  assert(from_to_fd[0] && from_to_fd[1]);
+
+  int to_from_fd[2];
+  assert(0 == pipe(to_from_fd));
+  assert(to_from_fd[0] && to_from_fd[1]);
+
+  pid_t from_p = fork();
+  if (from_p == 0) {
+    close(from_to_fd[0]); dup2(from_to_fd[1], 1);
+    close(to_from_fd[1]); dup2(to_from_fd[0], 0);
+
+    char * args[] = { argv0, "--from", from, 0 };
+    execv(argv0, args);
+    abort();
+  } else if (from_p > 0) {
+    pid_t to_p = fork();
+    if (to_p == 0) {
+      close(from_to_fd[1]); dup2(from_to_fd[0], 0);
+      close(to_from_fd[0]); dup2(to_from_fd[1], 1);
+
+      char * args[] = { argv0, "--to", to, 0 };
+      execv(argv0, args);
+      abort();
+    } else if (to_p > 0) {
+      // Note: both sides should exit on their own when their respective inputs
+      // are closed
+      int sl = 0;
+      assert(0 <= waitpid(from_p, &sl, 0));
+      if (WIFEXITED(sl) && 0 == WEXITSTATUS(sl)) {
+        assert(0 <= waitpid(to_p, &sl, 0));
+        if (WIFEXITED(sl) && 0 == WEXITSTATUS(sl)) return 0;
+      }
+    }
+  }
+#endif
+
+  fprintf(stderr, "failed to run child process\n");
+  return 1;
+}
+
 int main(int argc, char ** argv) {
   freopen(NULL, "rb", stdin); // Avoids CRLF conversions on windows-like
 
@@ -244,6 +295,10 @@ int main(int argc, char ** argv) {
   if (argc == 3 && 0 == strcmp("--to", argv[1])) {
     receive_files(argv[2]);
     return 0;
+  }
+
+  if (argc == 5 && 0 == strcmp("--from", argv[1]) && 0 == strcmp("--to", argv[3])) {
+    return pipe_from_to(argv[0], argv[2], argv[4]);
   }
 
   if (argc != 1) usage();
