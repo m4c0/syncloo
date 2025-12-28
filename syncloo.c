@@ -22,6 +22,38 @@ static void usage() {
   abort();
 }
 
+static uint64_t read_u64(int len) {
+  assert(len <= 8);
+
+  char buf[9] = { 0 };
+  assert(1 == fread(buf, len, 1, stdin));
+
+  char * end = 0;
+  uint64_t res = strtoll(buf, &end, 16);
+  assert(end && *end == 0);
+  assert(len);
+
+  return res;
+}
+static void read_eol() {
+  char lf = 0;
+  assert(1 == fread(&lf, 1, 1, stdin));
+  if (lf == '\r') assert(1 == fread(&lf, 1, 1, stdin));
+  assert(lf == '\n');
+}
+static char * read_filename(const char * root) {
+  uint64_t len = read_u64(3);
+
+  int root_len = strlen(root);
+  char * buf = calloc(len + root_len + 2, 1);
+  strcpy(buf, root);
+  strcat(buf, "/");
+  assert(len == fread(buf + root_len + 1, 1, len, stdin));
+  // TODO: replace with a check if realpath is inside root
+  assert(0 == strstr(buf, ".."));
+  return buf;
+}
+
 static void recurse_files(const char * path);
 
 static _Bool file_attrs(const char * path, uint64_t * mtime, uint64_t * fsize, _Bool * isdir) {
@@ -88,16 +120,8 @@ static void process_path(const char * parent, const char * file, _Bool is_dir) {
   assert(1 == fread(id, 4, 1, stdin));
   assert(0 == strncmp(id, "mtim", 4));
 
-  char num[9] = { 0 };
-  assert(1 == fread(num, 8, 1, stdin));
-  char * end = 0;
-  uint64_t mtime = strtoll(num, &end, 16);
-  assert(end && *end == 0);
-
-  char lf = 0;
-  assert(1 == fread(&lf, 1, 1, stdin));
-  if (lf == '\r') assert(1 == fread(&lf, 1, 1, stdin));
-  assert(lf == '\n');
+  uint64_t mtime = read_u64(8);
+  read_eol();
 
   uint64_t loc_mtime = 0;
   uint64_t loc_fsize = 0;
@@ -167,31 +191,23 @@ static void receive_files(const char * root) {
     if (1 != fread(id, 4, 1, stdin)) return;
 
     if (0 == strncmp(id, "MTIM", 4)) {;
-      char bf[4] = { 0 };
-      assert(1 == fread(bf, 3, 1, stdin));
-
-      char * end = 0;
-      uint64_t len = strtoll(bf, &end, 16);
-      assert(end && *end == 0);
-      assert(len);
-
-      int root_len = strlen(root);
-      char * buf = malloc(len + root_len + 2);
-      strcpy(buf, root);
-      strcat(buf, "/");
-      assert(len == fread(buf + root_len + 1, 1, len, stdin));
-
-      char lf = 0;
-      assert(1 == fread(&lf, 1, 1, stdin));
-      if (lf == '\r') assert(1 == fread(&lf, 1, 1, stdin));
-      assert(lf == '\n');
+      char * fname = read_filename(root);
+      read_eol();
 
       uint64_t loc_mtime = 0;
-      file_attrs(buf, &loc_mtime, 0, 0);
+      file_attrs(fname, &loc_mtime, 0, 0);
       printf("mtim%08llx\n", loc_mtime);
-      puts(buf);
 
-      free(buf);
+      free(fname);
+      continue;
+    } else if (0 == strncmp(id, "DATA", 4)) {
+      uint64_t data_len  = read_u64(8);
+      char * fname = read_filename(root);
+      read_eol();
+
+      printf("%lld %s\n", data_len, fname);
+
+      free(fname);
       continue;
     }
 
