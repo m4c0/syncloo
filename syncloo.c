@@ -211,9 +211,22 @@ static void receive_files(const char * root) {
       char * fname = read_filename(root);
       read_eol();
 
-      printf("%lld %s\n", data_len, fname);
+      FILE * out = fopen(fname, "wb");
+      assert(out);
 
+      while (data_len > 0) {
+        char buf[1024];
+        uint64_t n = data_len > 1024 ? 1024 : data_len;
+        assert(1 == fread(buf, data_len, 1, stdin));
+        assert(1 == fwrite(buf, data_len, 1, out));
+        data_len -= n;
+      }
+      read_eol();
+
+      fclose(out);
       free(fname);
+
+      printf("data\n");
       continue;
     }
 
@@ -222,6 +235,8 @@ static void receive_files(const char * root) {
 }
 
 int main(int argc, char ** argv) {
+  freopen(NULL, "rb", stdin); // Avoids CRLF conversions on windows-like
+
   if (argc == 3 && 0 == strcmp("--from", argv[1])) {
     recurse_files(argv[2]);
     return 0;
