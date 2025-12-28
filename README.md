@@ -48,6 +48,13 @@ Messages follows these rules:
 Messages so far:
 
 ```
+from> MKDR<str-dir-name>
+to  > mkdr
+```
+
+`MKDR` ensures a directory exists in the target process.
+
+```
 from> MTIM<str-file-name>
 to  > mtim<u64-timestamp>
 ```

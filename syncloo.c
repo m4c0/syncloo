@@ -124,13 +124,18 @@ static void process_path(const char * root, const char * parent, const char * fi
   strcat(fullpath, file);
   assert(0 == strncmp(root, parent, strlen(root)));
 
+  const char * rel_file = fullpath + strlen(root) + 1;
+  unsigned rel_flen = strlen(rel_file);
+
   if (is_dir) {
+    write_message("MKDR%03x%s\n", rel_flen, rel_file);
+
+    read_id("mkdr");
+    read_eol();
+
     recurse_files(root, fullpath);
     return;
   }
-
-  const char * rel_file = fullpath + strlen(root) + 1;
-  unsigned rel_flen = strlen(rel_file);
 
   // Check remote file mod time
 
@@ -210,7 +215,16 @@ static void receive_files(const char * root) {
     char id[4] = { 0 };
     if (1 != fread(id, 4, 1, stdin)) return;
 
-    if (0 == strncmp(id, "MTIM", 4)) {;
+    if (0 == strncmp(id, "MKDR", 4)) {;
+      char * fname = read_filename(root);
+      read_eol();
+
+      assert(0 == mkdir(fname, 0777) || errno == EEXIST);
+
+      write_message("mkdr\n");
+
+      free(fname);
+    } else if (0 == strncmp(id, "MTIM", 4)) {;
       char * fname = read_filename(root);
       read_eol();
 
