@@ -109,7 +109,7 @@ static void process_path(const char * parent, const char * file, _Bool is_dir) {
   if (strcmp(".",  file) == 0) return;
   if (strcmp("..", file) == 0) return;
 
-  int fpath_len = strlen(parent) + strlen(file) + 2;
+  int fpath_len = strlen(parent) + strlen(file) + 1;
   char * fullpath = malloc(fpath_len + 1);
   strcpy(fullpath, parent);
   strcat(fullpath, PATH_SEP);
