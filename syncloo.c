@@ -155,10 +155,14 @@ static void process_path(const char * root, const char * parent, const char * fi
 
   write_message("DATA%08llx%03x%s\n", loc_fsize, rel_flen, rel_file);
 
-  char buf[1024] = { 0 };
-  int rd = 0;
-  while ((rd = fread(buf, 1, 1024, f))) assert(fwrite(buf, rd, 1, stdout));
-  assert(!errno);
+  while (loc_fsize > 0) {
+    char buf[1024];
+    uint64_t n = loc_fsize > 1024 ? 1024 : loc_fsize;
+    assert(1 == fread(buf, n, 1, f));
+    assert(1 == fwrite(buf, n, 1, stdout));
+    loc_fsize -= n;
+  }
+  printf("\n");
   assert(0 == fflush(stdout));
 
   fclose(f);
@@ -245,8 +249,8 @@ static void receive_files(const char * root) {
       while (data_len > 0) {
         char buf[1024];
         uint64_t n = data_len > 1024 ? 1024 : data_len;
-        assert(1 == fread(buf, data_len, 1, stdin));
-        assert(1 == fwrite(buf, data_len, 1, out));
+        assert(1 == fread(buf, n, 1, stdin));
+        assert(1 == fwrite(buf, n, 1, out));
         data_len -= n;
       }
       read_eol();
