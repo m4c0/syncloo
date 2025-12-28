@@ -24,10 +24,11 @@ static void usage() {
 
 static void recurse_files(const char * path);
 
-static void file_attrs(const char * path, uint64_t * mtime, uint64_t * fsize, _Bool * isdir) {
+static _Bool file_attrs(const char * path, uint64_t * mtime, uint64_t * fsize, _Bool * isdir) {
 #ifdef _WIN32
   WIN32_FILE_ATTRIBUTE_DATA attrs = { 0 };
-  assert(GetFileAttributesExA(path, GetFileExInfoStandard, &attrs));
+  if (!GetFileAttributesExA(path, GetFileExInfoStandard, &attrs)) return 0;
+
   if (isdir) *isdir = attrs.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY;
 
   // mod-time change depending on underlying file system (NTFS/FAT/etc)
@@ -54,11 +55,13 @@ static void file_attrs(const char * path, uint64_t * mtime, uint64_t * fsize, _B
   if (fsize) *fsize = ul.QuadPart;
 #else
   struct stat st = { 0 };
-  assert(0 == stat(path, &st) && "path not found");
+  if (0 != stat(path, &st)) return 0;
   if (mtime) *mtime = st.st_mtimespec.tv_sec;
   if (fsize) *fsize = st.st_size;
   if (isdir) *isdir = st.st_mode & S_IFDIR;
 #endif
+
+  return 1;
 }
 
 static void process_path(const char * parent, const char * file, _Bool is_dir) {
@@ -78,7 +81,7 @@ static void process_path(const char * parent, const char * file, _Bool is_dir) {
 
   // Check remote file mod time
 
-  assert(printf("MTIM%04x%s\n", fpath_len, fullpath));
+  assert(printf("MTIM%03x%s\n", fpath_len, fullpath));
   assert(0 == fflush(stdout));
 
   char id[4] = { 0 };
@@ -98,13 +101,13 @@ static void process_path(const char * parent, const char * file, _Bool is_dir) {
 
   uint64_t loc_mtime = 0;
   uint64_t loc_fsize = 0;
-  file_attrs(fullpath, &loc_mtime, &loc_fsize, 0);
+  assert(file_attrs(fullpath, &loc_mtime, &loc_fsize, 0));
   if (mtime > loc_mtime) return;
 
   FILE * f = fopen(fullpath, "rb");
   assert(f);
 
-  printf("DATA%08llx%04x%s\n", loc_fsize, fpath_len, fullpath);
+  printf("DATA%08llx%03x%s\n", loc_fsize, fpath_len, fullpath);
 
   char buf[1024] = { 0 };
   int rd = 0;
@@ -158,6 +161,42 @@ static void receive_files(const char * root) {
   _Bool isdir = 0;
   file_attrs(root, 0, 0, &isdir);
   assert(isdir && "target path is not a directory");
+
+  while (!feof(stdin)) {
+    char id[4] = { 0 };
+    if (1 != fread(id, 4, 1, stdin)) return;
+
+    if (0 == strncmp(id, "MTIM", 4)) {;
+      char bf[4] = { 0 };
+      assert(1 == fread(bf, 3, 1, stdin));
+
+      char * end = 0;
+      uint64_t len = strtoll(bf, &end, 16);
+      assert(end && *end == 0);
+      assert(len);
+
+      int root_len = strlen(root);
+      char * buf = malloc(len + root_len + 2);
+      strcpy(buf, root);
+      strcat(buf, "/");
+      assert(len == fread(buf + root_len + 1, 1, len, stdin));
+
+      char lf = 0;
+      assert(1 == fread(&lf, 1, 1, stdin));
+      if (lf == '\r') assert(1 == fread(&lf, 1, 1, stdin));
+      assert(lf == '\n');
+
+      uint64_t loc_mtime = 0;
+      file_attrs(buf, &loc_mtime, 0, 0);
+      printf("mtim%08llx\n", loc_mtime);
+      puts(buf);
+
+      free(buf);
+      continue;
+    }
+
+    assert(0 && "invalid code received");
+  }
 }
 
 int main(int argc, char ** argv) {
