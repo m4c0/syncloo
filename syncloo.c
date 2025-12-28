@@ -24,8 +24,11 @@
 #  define DEBUG_PROTOCOL(...)
 #endif
 
-static void usage() {
-  fprintf(stderr, "usage: ...");
+static void usage(const char * argv0) {
+  fprintf(stderr,
+      "usage: \n"
+      "    %s --from <path> --to <path>\n",
+      argv0);
   abort();
 }
 
@@ -382,7 +385,6 @@ int main(int argc, char ** argv) {
     return pipe_from_to(argv[0], argv[2], argv[4]);
   }
 
-  if (argc != 1) usage();
-
+  usage(argv[0]);
   return 0;
 }
