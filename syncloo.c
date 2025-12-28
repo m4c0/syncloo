@@ -269,7 +269,55 @@ static int pipe_from_to(char * argv0, char * from, char * to) {
   assert(from && *from && to && *to);
 
 #ifdef _WIN32
-#error TBD
+  SECURITY_ATTRIBUTES attr = { 0 };
+  attr.nLength = sizeof(SECURITY_ATTRIBUTES);
+  attr.bInheritHandle = TRUE;
+
+  HANDLE h[4] = { 0 };
+  assert(CreatePipe(h[0], h[1], &attr, 64 * 1024));
+  assert(CreatePipe(h[2], h[3], &attr, 64 * 1024));
+
+  STARTUPINFO si = { 0 };
+  si.cb = sizeof(STARTUPINFO);
+  si.dwFlags = STARTF_USESTDHANDLES;
+
+  unsigned sz = snprintf(NULL, 0, "%s --from %s", argv0, from) + 1;
+  char * cmdline = malloc(sz);
+  sprintf(cmdline, "%s --from %s", argv0, from);
+
+  PROCESS_INFORMATION pi_f = { 0 };
+  si.hStdOutput = h[1];
+  si.hStdInput = h[2];
+  assert(CreateProcess(NULL, cmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi_f));
+
+  free(cmdline);
+
+  sz = snprintf(NULL, 0, "%s --to %s", argv0, to) + 1;
+  cmdline = malloc(sz);
+  sprintf(cmdline, "%s --from %s", argv0, to);
+
+  PROCESS_INFORMATION pi_t = { 0 };
+  si.hStdOutput = h[3];
+  si.hStdInput = h[0];
+  assert(CreateProcess(NULL, cmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi_t));
+
+  free(cmdline);
+
+  CloseHandle(pi_f.hThread);
+  CloseHandle(pi_t.hThread);
+  for (int i = 0; i < 4; i++) CloseHandle(h[i]);
+
+  DWORD ext_f = STILL_ACTIVE;
+  WaitForSingleObject(pi_f.hProcess);
+  GetExitCodeProcess(pi_f.hProcess, &ext_f);
+  CloseHandle(pi_f.hProcess);
+
+  DWORD ext_t = STILL_ACTIVE;
+  WaitForSingleObject(pi_t.hProcess);
+  GetExitCodeProcess(pi_f.hProcess, &ext_t);
+  CloseHandle(pi_t.hProcess);
+
+  if (ext_f == 0 && ext_t == 0) return;
 #else
   int from_to_fd[2];
   assert(0 == pipe(from_to_fd));
