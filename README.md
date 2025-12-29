@@ -29,6 +29,8 @@ from> DATA000000000000000e007hello.cpp
 from> int main() {}
 from>
 to  > data
+from> CR32009hello.cpp
+to  > cr3278257017
 from> MTIM009hello.cpp
 to  > mtim000000006951462d
 ```
