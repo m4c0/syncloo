@@ -349,6 +349,7 @@ static int pipe_from_to(char * argv0, char * from, char * to) {
 
   PROCESS_INFORMATION pi_f = { 0 };
   assert(CreateProcess(argv0, cmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi_f));
+  CloseHandle(pi_f.hThread);
 
   assert(32767 > snprintf(cmdline, 32767, "%s --to %s", argv0, to));
 
@@ -357,23 +358,26 @@ static int pipe_from_to(char * argv0, char * from, char * to) {
 
   PROCESS_INFORMATION pi_t = { 0 };
   assert(CreateProcess(argv0, cmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi_t));
-
-  CloseHandle(pi_f.hThread);
   CloseHandle(pi_t.hThread);
 
-  DWORD ext_f = STILL_ACTIVE;
-  WaitForSingleObject(pi_f.hProcess, INFINITE);
-  GetExitCodeProcess(pi_f.hProcess, &ext_f);
-  CloseHandle(pi_f.hProcess);
+  for (int i = 0; i < 4; i++) assert(CloseHandle(h[i]));
 
-  DWORD ext_t = STILL_ACTIVE;
-  WaitForSingleObject(pi_t.hProcess, INFINITE);
-  GetExitCodeProcess(pi_f.hProcess, &ext_t);
-  CloseHandle(pi_t.hProcess);
+  HANDLE h_ft[2] = { pi_f.hProcess, pi_t.hProcess };
+  DWORD who = WaitForMultipleObjects(2, h_ft, FALSE, INFINITE);
+  assert(who >= WAIT_OBJECT_0 && who < WAIT_OBJECT_0 + 2);
+  who -= WAIT_OBJECT_0;
 
-  for (int i = 0; i < 4; i++) CloseHandle(h[i]);
+  DWORD exts[2] = { STILL_ACTIVE, STILL_ACTIVE };
+  GetExitCodeProcess(h_ft[who], &exts[who]);
+  assert(CloseHandle(h_ft[who]));
 
-  if (ext_f == 0 && ext_t == 0) return 0;
+
+  WaitForSingleObject(h_ft[1 - who], INFINITE);
+  GetExitCodeProcess(h_ft[1 - who], &exts[1 - who]);
+  CloseHandle(h_ft[1 - who]);
+
+
+  if (exts[0] == 0 && exts[1] == 0) return 0;
 #else
   int from_to_fd[2];
   assert(0 == pipe(from_to_fd));
