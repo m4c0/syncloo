@@ -2,6 +2,7 @@
 #  define WIN32_LEAN_AND_MEAN
 #  define _CRT_SECURE_NO_WARNINGS
 #  include <windows.h>
+#  include <direct.h>
 #else
 #  include <dirent.h>
 #  include <sys/stat.h>
@@ -271,7 +272,11 @@ static void receive_files(const char * root) {
       char * fname = read_filename(root);
       read_eol();
 
+#ifdef _WIN32
+      assert(0 == _mkdir(fname) || errno == EEXIST);
+#else
       assert(0 == mkdir(fname, 0777) || errno == EEXIST);
+#endif
 
       write_message("mkdr\n");
 
@@ -356,21 +361,21 @@ static int pipe_from_to(char * argv0, char * from, char * to) {
 
   free(cmdline);
 
-  CloseHandle(pi_f.hThread);
-  CloseHandle(pi_t.hThread);
   for (int i = 0; i < 4; i++) CloseHandle(h[i]);
 
   DWORD ext_f = STILL_ACTIVE;
-  WaitForSingleObject(pi_f.hProcess);
+  WaitForSingleObject(pi_f.hProcess, INFINITE);
   GetExitCodeProcess(pi_f.hProcess, &ext_f);
   CloseHandle(pi_f.hProcess);
+  CloseHandle(pi_f.hThread);
 
   DWORD ext_t = STILL_ACTIVE;
-  WaitForSingleObject(pi_t.hProcess);
+  WaitForSingleObject(pi_t.hProcess, INFINITE);
   GetExitCodeProcess(pi_f.hProcess, &ext_t);
   CloseHandle(pi_t.hProcess);
+  CloseHandle(pi_t.hThread);
 
-  if (ext_f == 0 && ext_t == 0) return;
+  if (ext_f == 0 && ext_t == 0) return 0;
 #else
   int from_to_fd[2];
   assert(0 == pipe(from_to_fd));
