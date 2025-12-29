@@ -346,6 +346,8 @@ static int pipe_from_to(char * argv0, char * from, char * to) {
 
   si.hStdOutput = h[1];
   si.hStdInput = h[2];
+  assert(SetHandleInformation(h[0], HANDLE_FLAG_INHERIT, 0));
+  assert(SetHandleInformation(h[3], HANDLE_FLAG_INHERIT, 0));
 
   PROCESS_INFORMATION pi_f = { 0 };
   assert(CreateProcess(argv0, cmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi_f));
@@ -355,6 +357,11 @@ static int pipe_from_to(char * argv0, char * from, char * to) {
 
   si.hStdOutput = h[3];
   si.hStdInput = h[0];
+  // Mandatory switchroo otherwise children will not end
+  assert(SetHandleInformation(h[0], HANDLE_FLAG_INHERIT, 1));
+  assert(SetHandleInformation(h[1], HANDLE_FLAG_INHERIT, 0));
+  assert(SetHandleInformation(h[2], HANDLE_FLAG_INHERIT, 0));
+  assert(SetHandleInformation(h[3], HANDLE_FLAG_INHERIT, 1));
 
   PROCESS_INFORMATION pi_t = { 0 };
   assert(CreateProcess(argv0, cmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi_t));
@@ -371,11 +378,9 @@ static int pipe_from_to(char * argv0, char * from, char * to) {
   GetExitCodeProcess(h_ft[who], &exts[who]);
   assert(CloseHandle(h_ft[who]));
 
-
   WaitForSingleObject(h_ft[1 - who], INFINITE);
   GetExitCodeProcess(h_ft[1 - who], &exts[1 - who]);
   CloseHandle(h_ft[1 - who]);
-
 
   if (exts[0] == 0 && exts[1] == 0) return 0;
 #else
