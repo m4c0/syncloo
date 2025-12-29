@@ -1,8 +1,10 @@
 #ifdef _WIN32
 #  define WIN32_LEAN_AND_MEAN
 #  define _CRT_SECURE_NO_WARNINGS
-#  include <windows.h>
 #  include <direct.h>
+#  include <fcntl.h>
+#  include <io.h>
+#  include <windows.h>
 #else
 #  include <dirent.h>
 #  include <sys/stat.h>
@@ -430,9 +432,12 @@ static int pipe_from_to(char * argv0, char * from, char * to) {
 }
 
 int main(int argc, char ** argv) {
-  // Avoids CRLF conversions on windows-like
-  freopen(NULL, "rb", stdin);
-  freopen(NULL, "wb", stdout);
+#ifdef _WIN32
+  // Changes both stdin and stdout to "binary" mode. Otherwise, we will not be
+  // able to transfer any file containing Ctrl-Z (0x1a)
+  assert(0 <= _setmode(0, _O_BINARY));
+  assert(0 <= _setmode(1, _O_BINARY));
+#endif
 
   crc_init();
 
