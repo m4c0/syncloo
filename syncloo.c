@@ -26,8 +26,10 @@
 
 static void usage(const char * argv0) {
   fprintf(stderr,
+      "\n"
       "usage: \n"
-      "    %s --from <path> --to <path>\n",
+      "    %s --from <path> --to <path>\n"
+      "\n",
       argv0);
   abort();
 }
@@ -193,11 +195,13 @@ static void process_path(const char * root, const char * parent, const char * fi
 
   write_message("DATA%08llx%03x%s\n", loc_fsize, rel_flen, rel_file);
 
+  uint32_t crc = 0;
   while (loc_fsize > 0) {
-    char buf[1024];
+    unsigned char buf[1024];
     uint64_t n = loc_fsize > 1024 ? 1024 : loc_fsize;
     assert(1 == fread(buf, n, 1, f));
     assert(1 == fwrite(buf, n, 1, stdout));
+    crc = crc_step(crc, buf, n);
     loc_fsize -= n;
   }
   printf("\n");
@@ -206,6 +210,12 @@ static void process_path(const char * root, const char * parent, const char * fi
   fclose(f);
 
   read_id("data");
+  read_eol();
+
+  write_message("CR32%03x%s\n", rel_flen, rel_file);
+
+  read_id("cr32");
+  assert((uint64_t)crc == read_u64(8));
   read_eol();
 }
 
@@ -301,7 +311,7 @@ static void receive_files(const char * root) {
       char * fname = read_filename(root);
       read_eol();
 
-      write_message("cr32%04x\n", crc_file(fname));
+      write_message("cr32%08x\n", crc_file(fname));
     } else {
       assert(0 && "invalid code received");
     }
