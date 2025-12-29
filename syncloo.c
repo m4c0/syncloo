@@ -335,45 +335,43 @@ static int pipe_from_to(char * argv0, char * from, char * to) {
   assert(CreatePipe(h + 0, h + 1, &attr, 64 * 1024));
   assert(CreatePipe(h + 2, h + 3, &attr, 64 * 1024));
 
+  char cmdline[32768] = { 0 }; // maximum of 32767, according to CreateProcess manual
+
   STARTUPINFO si = { 0 };
   si.cb = sizeof(STARTUPINFO);
   si.dwFlags = STARTF_USESTDHANDLES;
+  si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
 
-  unsigned sz = snprintf(NULL, 0, "%s --from %s", argv0, from) + 1;
-  char * cmdline = malloc(sz);
-  sprintf(cmdline, "%s --from %s", argv0, from);
+  assert(32767 > snprintf(cmdline, 32767, "%s --from %s", argv0, from));
 
-  PROCESS_INFORMATION pi_f = { 0 };
   si.hStdOutput = h[1];
   si.hStdInput = h[2];
-  assert(CreateProcess(NULL, cmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi_f));
 
-  free(cmdline);
+  PROCESS_INFORMATION pi_f = { 0 };
+  assert(CreateProcess(argv0, cmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi_f));
 
-  sz = snprintf(NULL, 0, "%s --to %s", argv0, to) + 1;
-  cmdline = malloc(sz);
-  sprintf(cmdline, "%s --from %s", argv0, to);
+  assert(32767 > snprintf(cmdline, 32767, "%s --to %s", argv0, to));
 
-  PROCESS_INFORMATION pi_t = { 0 };
   si.hStdOutput = h[3];
   si.hStdInput = h[0];
-  assert(CreateProcess(NULL, cmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi_t));
 
-  free(cmdline);
+  PROCESS_INFORMATION pi_t = { 0 };
+  assert(CreateProcess(argv0, cmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi_t));
 
-  for (int i = 0; i < 4; i++) CloseHandle(h[i]);
+  CloseHandle(pi_f.hThread);
+  CloseHandle(pi_t.hThread);
 
   DWORD ext_f = STILL_ACTIVE;
   WaitForSingleObject(pi_f.hProcess, INFINITE);
   GetExitCodeProcess(pi_f.hProcess, &ext_f);
   CloseHandle(pi_f.hProcess);
-  CloseHandle(pi_f.hThread);
 
   DWORD ext_t = STILL_ACTIVE;
   WaitForSingleObject(pi_t.hProcess, INFINITE);
   GetExitCodeProcess(pi_f.hProcess, &ext_t);
   CloseHandle(pi_t.hProcess);
-  CloseHandle(pi_t.hThread);
+
+  for (int i = 0; i < 4; i++) CloseHandle(h[i]);
 
   if (ext_f == 0 && ext_t == 0) return 0;
 #else
