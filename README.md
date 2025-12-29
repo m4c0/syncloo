@@ -24,13 +24,13 @@ hypothetical session:
 
 ```
 from> MTIM009hello.cpp
-to  > mtim00000000
-from> DATA0000000e007hello.cpp
+to  > mtim0000000000000000
+from> DATA000000000000000e007hello.cpp
 from> int main() {}
 from>
 to  > data
 from> MTIM009hello.cpp
-to  > mtim6951462d
+to  > mtim000000006951462d
 ```
 
 It is a simple request-response protocol, driven by the "from" process, focused
