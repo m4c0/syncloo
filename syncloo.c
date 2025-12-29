@@ -47,9 +47,9 @@ static void read_id(const char buf[4]) {
   assert(0 == strncmp(id, buf, 4));
 }
 static uint64_t read_u64(int len) {
-  assert(len <= 8);
+  assert(len <= 16);
 
-  char buf[9] = { 0 };
+  char buf[17] = { 0 };
   assert(1 == fread(buf, len, 1, stdin));
 
   char * end = 0;
@@ -183,7 +183,7 @@ static void process_path(const char * root, const char * parent, const char * fi
   write_message("MTIM%03x%s\n", rel_flen, rel_file);
 
   read_id("mtim");
-  uint64_t mtime = read_u64(8);
+  uint64_t mtime = read_u64(16);
   read_eol();
 
   uint64_t loc_mtime = 0;
@@ -194,7 +194,7 @@ static void process_path(const char * root, const char * parent, const char * fi
   FILE * f = fopen(fullpath, "rb");
   assert(f);
 
-  write_message("DATA%08llx%03x%s\n", loc_fsize, rel_flen, rel_file);
+  write_message("DATA%016llx%03x%s\n", loc_fsize, rel_flen, rel_file);
 
   uint32_t crc = 0;
   while (loc_fsize > 0) {
@@ -288,11 +288,11 @@ static void receive_files(const char * root) {
       uint64_t loc_mtime = 0;
       file_attrs(fname, &loc_mtime, 0, 0);
 
-      write_message("mtim%08llx\n", loc_mtime);
+      write_message("mtim%016llx\n", loc_mtime);
 
       free(fname);
     } else if (0 == strncmp(id, "DATA", 4)) {
-      uint64_t data_len  = read_u64(8);
+      uint64_t data_len  = read_u64(16);
       char * fname = read_filename(root);
       read_eol();
 
