@@ -332,8 +332,8 @@ static int pipe_from_to(char * argv0, char * from, char * to) {
   attr.bInheritHandle = TRUE;
 
   HANDLE h[4] = { 0 };
-  assert(CreatePipe(h[0], h[1], &attr, 64 * 1024));
-  assert(CreatePipe(h[2], h[3], &attr, 64 * 1024));
+  assert(CreatePipe(h + 0, h + 1, &attr, 64 * 1024));
+  assert(CreatePipe(h + 2, h + 3, &attr, 64 * 1024));
 
   STARTUPINFO si = { 0 };
   si.cb = sizeof(STARTUPINFO);
