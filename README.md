@@ -5,6 +5,30 @@ Simple file sync tool.
 ## Example of usage
 
 ```
+syncloo --from /path/to/original --to /path/to/backup
+```
+
+This copies all files from the "original" path to "backup". Currently it uses
+the file modification time to check if file should be copied and a CRC-32 to
+verify the copy was successful. The process abort on any errors.
+
+## Building
+
+Given any system with a C compiler and some POSIX support, you can either compile the `syncloo.c` file yourself:
+
+```
+cc syncloo.c -o syncloo
+```
+
+Should work on any compiler and no special flags needed. There is also a
+`build.c` file that can be used to build it, but it is mostly used for running
+the final executable after a successful build.
+
+## How it works
+
+Internally, it spins up two process, being the equivalent to:
+
+```
 mkfifo /tmp/syncloo-1.fifo /tmp/syncloo-2.fifo
 syncloo --from mylocal/.git       > /tmp/syncloo-1.fifo < /tmp/syncloo-2.fifo &
 syncloo --to ~/backup/mylocal.git < /tmp/syncloo-1.fifo > /tmp/syncloo-2.fifo 
