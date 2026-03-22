@@ -84,6 +84,11 @@ static void recurse_files(const char * root, const char * path);
 static _Bool file_attrs(const char * path, uint64_t * mtime, uint64_t * fsize, _Bool * isdir) {
 #ifdef _WIN32
   WIN32_FILE_ATTRIBUTE_DATA attrs = { 0 };
+  // Meanwhile, if this fails, you most likely got a file with a character that
+  // is invalid in the target filesystem. Real-life example: I got the unicode
+  // equivalent of "ff" as a single letter which was not compatible with FAT,
+  // but it was in NTFS. So things like emdashes, etc might lead you here.
+  // TODO: GetLastError + FormatMessage (unsure that message will be useful, TBH)
   if (!GetFileAttributesExA(path, GetFileExInfoStandard, &attrs)) return 0;
 
   if (isdir) *isdir = attrs.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY;
