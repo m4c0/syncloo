@@ -172,17 +172,33 @@ static int is_valid(const char * file) {
   if (strcmp("System Volume Information", file) == 0) return 0;
   return 1;
 }
-
-static void process_path(const char * root, const char * parent, const char * file, _Bool is_dir) {
-  if (!is_valid(file)) return;
-
+static const char * absolute_path(const char * root, const char * parent, const char * file) {
   int fpath_len = strlen(parent) + strlen(file) + 1;
   char * fullpath = malloc(fpath_len + 1);
   strcpy(fullpath, parent);
   strcat(fullpath, PATH_SEP);
   strcat(fullpath, file);
   assert(0 == strncmp(root, parent, strlen(root)));
+  return fullpath;
+}
+// returns local file size if remote is not updated
+static uint64_t check_mtime(const char * fullpath, const char * rel_file, unsigned rel_flen) {
+  write_message("MTIM%03x%s\n", rel_flen, rel_file);
 
+  read_id("mtim");
+  uint64_t mtime = read_u64(16);
+  read_eol();
+
+  uint64_t loc_mtime = 0;
+  uint64_t loc_fsize = 0;
+  assert(file_attrs(fullpath, &loc_mtime, &loc_fsize, 0));
+  return mtime > loc_mtime ? 0 : loc_fsize;
+}
+
+static void process_path(const char * root, const char * parent, const char * file, _Bool is_dir) {
+  if (!is_valid(file)) return;
+
+  const char * fullpath = absolute_path(root, parent, file);
   const char * rel_file = fullpath + strlen(root) + 1;
   unsigned rel_flen = strlen(rel_file);
 
@@ -198,16 +214,8 @@ static void process_path(const char * root, const char * parent, const char * fi
 
   // Check remote file mod time
 
-  write_message("MTIM%03x%s\n", rel_flen, rel_file);
-
-  read_id("mtim");
-  uint64_t mtime = read_u64(16);
-  read_eol();
-
-  uint64_t loc_mtime = 0;
-  uint64_t loc_fsize = 0;
-  assert(file_attrs(fullpath, &loc_mtime, &loc_fsize, 0));
-  if (mtime > loc_mtime) return;
+  uint64_t loc_fsize = check_mtime(fullpath, rel_file, rel_flen);
+  if (loc_fsize == 0) return;
 
   FILE * f = fopen(fullpath, "rb");
   assert(f);
@@ -240,7 +248,21 @@ static void process_path(const char * root, const char * parent, const char * fi
 static void check_path(const char * root, const char * parent, const char * file, _Bool is_dir) {
   if (!is_valid(file)) return;
 
-  fprintf(stderr, "%s %s %s %d\n", root, parent, file, is_dir);
+  const char * fullpath = absolute_path(root, parent, file);
+  const char * rel_file = fullpath + strlen(root) + 1;
+  unsigned rel_flen = strlen(rel_file);
+
+  if (is_dir) {
+    recurse_files(root, fullpath, check_path);
+    return;
+  }
+
+  uint64_t loc_fsize = check_mtime(fullpath, rel_file, rel_flen);
+  if (loc_fsize != 0) {
+    fprintf(stderr, "Missing: %s\n", rel_file);
+    return;
+  }
+
 }
 
 static void recurse_files(const char * root, const char * path, path_proc fn) {
