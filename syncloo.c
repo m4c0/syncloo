@@ -164,6 +164,11 @@ static uint32_t crc_file(const char * path) {
 static void process_path(const char * root, const char * parent, const char * file, _Bool is_dir) {
   if (strcmp(".",  file) == 0) return;
   if (strcmp("..", file) == 0) return;
+  // OS-specifics
+  if (strcmp(".Spotlight-V100", file) == 0) return;
+  if (strcmp(".fseventsd", file) == 0) return;
+  if (strcmp("$RECYCLE.BIN", file) == 0) return;
+  if (strcmp("System Volume Information", file) == 0) return;
 
   int fpath_len = strlen(parent) + strlen(file) + 1;
   char * fullpath = malloc(fpath_len + 1);
