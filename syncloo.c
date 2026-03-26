@@ -182,7 +182,7 @@ static const char * absolute_path(const char * root, const char * parent, const 
   return fullpath;
 }
 // returns local file size if remote is not updated
-static uint64_t check_mtime(const char * fullpath, const char * rel_file, unsigned rel_flen) {
+static _Bool check_mtime(const char * fullpath, const char * rel_file, unsigned rel_flen, uint64_t * loc_fsize) {
   write_message("MTIM%03x%s\n", rel_flen, rel_file);
 
   read_id("mtim");
@@ -190,14 +190,14 @@ static uint64_t check_mtime(const char * fullpath, const char * rel_file, unsign
   read_eol();
 
   uint64_t loc_mtime = 0;
-  uint64_t loc_fsize = 0;
-  if (0 == file_attrs(fullpath, &loc_mtime, &loc_fsize, 0)) {
+  *loc_fsize = 0;
+  if (0 == file_attrs(fullpath, &loc_mtime, loc_fsize, 0)) {
     // This might happen on files with accents. 2026 and this still trigger
     // issues on Windows and MacOS
     fprintf(stderr, "Ignoring unreadable file: %s\n", fullpath);
-    return 0;
+    return 1;
   }
-  return mtime > loc_mtime ? 0 : loc_fsize;
+  return mtime > loc_mtime;
 }
 
 static void process_path(const char * root, const char * parent, const char * file, _Bool is_dir) {
@@ -219,8 +219,8 @@ static void process_path(const char * root, const char * parent, const char * fi
 
   // Check remote file mod time
 
-  uint64_t loc_fsize = check_mtime(fullpath, rel_file, rel_flen);
-  if (loc_fsize == 0) return;
+  uint64_t loc_fsize;
+  if (check_mtime(fullpath, rel_file, rel_flen, &loc_fsize)) return;
 
   FILE * f = fopen(fullpath, "rb");
   assert(f);
@@ -262,12 +262,32 @@ static void check_path(const char * root, const char * parent, const char * file
     return;
   }
 
-  uint64_t loc_fsize = check_mtime(fullpath, rel_file, rel_flen);
-  if (loc_fsize != 0) {
+  uint64_t loc_fsize;
+  if (!check_mtime(fullpath, rel_file, rel_flen, &loc_fsize)) {
     fprintf(stderr, "Missing: %s\n", rel_file);
     return;
   }
 
+  FILE * f = fopen(fullpath, "rb");
+  assert(f);
+
+  uint32_t crc = 0;
+  while (loc_fsize > 0) {
+    unsigned char buf[1024];
+    uint64_t n = loc_fsize > 1024 ? 1024 : loc_fsize;
+    assert(1 == fread(buf, n, 1, f));
+    crc = crc_step(crc, buf, n);
+    loc_fsize -= n;
+  }
+  fclose(f);
+
+  write_message("CR32%03x%s\n", rel_flen, rel_file);
+
+  read_id("cr32");
+  if ((uint64_t)crc != read_u64(8)) {
+    fprintf(stderr, "Differs: %s\n", rel_file);
+  }
+  read_eol();
 }
 
 static void recurse_files(const char * root, const char * path, path_proc fn) {
