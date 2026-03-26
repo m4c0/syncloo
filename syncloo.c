@@ -191,7 +191,12 @@ static uint64_t check_mtime(const char * fullpath, const char * rel_file, unsign
 
   uint64_t loc_mtime = 0;
   uint64_t loc_fsize = 0;
-  assert(file_attrs(fullpath, &loc_mtime, &loc_fsize, 0));
+  if (0 == file_attrs(fullpath, &loc_mtime, &loc_fsize, 0)) {
+    // This might happen on files with accents. 2026 and this still trigger
+    // issues on Windows and MacOS
+    fprintf(stderr, "Ignoring unreadable file: %s\n", fullpath);
+    return 0;
+  }
   return mtime > loc_mtime ? 0 : loc_fsize;
 }
 
