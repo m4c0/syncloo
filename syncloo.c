@@ -162,14 +162,19 @@ static uint32_t crc_file(const char * path) {
   return crc;
 }
 
-static void process_path(const char * root, const char * parent, const char * file, _Bool is_dir) {
-  if (strcmp(".",  file) == 0) return;
-  if (strcmp("..", file) == 0) return;
+static int is_valid(const char * file) {
+  if (strcmp(".",  file) == 0) return 0;
+  if (strcmp("..", file) == 0) return 0;
   // OS-specifics
-  if (strcmp(".Spotlight-V100", file) == 0) return;
-  if (strcmp(".fseventsd", file) == 0) return;
-  if (strcmp("$RECYCLE.BIN", file) == 0) return;
-  if (strcmp("System Volume Information", file) == 0) return;
+  if (strcmp(".Spotlight-V100", file) == 0) return 0;
+  if (strcmp(".fseventsd", file) == 0) return 0;
+  if (strcmp("$RECYCLE.BIN", file) == 0) return 0;
+  if (strcmp("System Volume Information", file) == 0) return 0;
+  return 1;
+}
+
+static void process_path(const char * root, const char * parent, const char * file, _Bool is_dir) {
+  if (!is_valid(file)) return;
 
   int fpath_len = strlen(parent) + strlen(file) + 1;
   char * fullpath = malloc(fpath_len + 1);
@@ -231,6 +236,11 @@ static void process_path(const char * root, const char * parent, const char * fi
   read_id("cr32");
   assert((uint64_t)crc == read_u64(8));
   read_eol();
+}
+static void check_path(const char * root, const char * parent, const char * file, _Bool is_dir) {
+  if (!is_valid(file)) return;
+
+  fprintf(stderr, "%s %s %s %d\n", root, parent, file, is_dir);
 }
 
 static void recurse_files(const char * root, const char * path, path_proc fn) {
@@ -452,6 +462,10 @@ int main(int argc, char ** argv) {
 
   crc_init();
 
+  if (argc == 3 && 0 == strcmp("--check", argv[1])) {
+    recurse_files(argv[2], argv[2], check_path);
+    return 0;
+  }
   if (argc == 3 && 0 == strcmp("--from", argv[1])) {
     recurse_files(argv[2], argv[2], process_path);
     return 0;
@@ -461,6 +475,9 @@ int main(int argc, char ** argv) {
     return 0;
   }
 
+  if (argc == 5 && 0 == strcmp("--check", argv[1]) && 0 == strcmp("--to", argv[3])) {
+    return pipe_a_b(argv[0], "--check", argv[2], argv[4]);
+  }
   if (argc == 5 && 0 == strcmp("--from", argv[1]) && 0 == strcmp("--to", argv[3])) {
     return pipe_a_b(argv[0], "--from", argv[2], argv[4]);
   }
