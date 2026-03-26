@@ -269,7 +269,10 @@ static void check_path(const char * root, const char * parent, const char * file
   }
 
   FILE * f = fopen(fullpath, "rb");
-  assert(f);
+  if (!f) {
+    fprintf(stderr, "Ignoring unreadable file: %s\n", fullpath);
+    return;
+  }
 
   uint32_t crc = 0;
   while (loc_fsize > 0) {
