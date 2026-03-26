@@ -79,7 +79,8 @@ static char * read_filename(const char * root) {
   assert(0 == fflush(stdout));    \
   DEBUG_PROTOCOL(__VA_ARGS__);
 
-static void recurse_files(const char * root, const char * path);
+typedef void (*path_proc)(const char * root, const char * parent, const char * file, _Bool is_dir);
+static void recurse_files(const char * root, const char * path, path_proc fn);
 
 static _Bool file_attrs(const char * path, uint64_t * mtime, uint64_t * fsize, _Bool * isdir) {
 #ifdef _WIN32
@@ -186,7 +187,7 @@ static void process_path(const char * root, const char * parent, const char * fi
     read_id("mkdr");
     read_eol();
 
-    recurse_files(root, fullpath);
+    recurse_files(root, fullpath, process_path);
     return;
   }
 
@@ -232,7 +233,7 @@ static void process_path(const char * root, const char * parent, const char * fi
   read_eol();
 }
 
-static void recurse_files(const char * root, const char * path) {
+static void recurse_files(const char * root, const char * path, path_proc fn) {
   assert(path);
 
   int pathlen = strlen(path);
@@ -252,7 +253,7 @@ static void recurse_files(const char * root, const char * path) {
 
   do {
     _Bool is_dir = ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY;
-    process_path(root, path, ffd.cFileName, is_dir);
+    fn(root, path, ffd.cFileName, is_dir);
   } while (0 != FindNextFile(h, &ffd));
 
   FindClose(h);
@@ -265,7 +266,7 @@ static void recurse_files(const char * root, const char * path) {
 
   struct dirent * de;
   while ((de = readdir(dir))) {
-    process_path(root, path, de->d_name, de->d_type == DT_DIR);
+    fn(root, path, de->d_name, de->d_type == DT_DIR);
   }
   closedir(dir);
 #endif
@@ -335,7 +336,7 @@ static void receive_files(const char * root) {
   }
 }
 
-static int pipe_from_to(char * argv0, char * from, char * to) {
+static int pipe_a_b(char * argv0, const char * cmd, char * from, char * to) {
   assert(from && *from && to && *to);
 
 #ifdef _WIN32
@@ -354,7 +355,7 @@ static int pipe_from_to(char * argv0, char * from, char * to) {
   si.dwFlags = STARTF_USESTDHANDLES;
   si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
 
-  assert(32767 > snprintf(cmdline, 32767, "%s --from %s", argv0, from));
+  assert(32767 > snprintf(cmdline, 32767, "%s %s %s", argv0, cmd, from));
 
   si.hStdOutput = h[1];
   si.hStdInput = h[2];
@@ -409,7 +410,7 @@ static int pipe_from_to(char * argv0, char * from, char * to) {
     close(from_to_fd[0]); dup2(from_to_fd[1], 1);
     close(to_from_fd[1]); dup2(to_from_fd[0], 0);
 
-    char * args[] = { argv0, "--from", from, 0 };
+    char * args[] = { argv0, strdup(cmd), from, 0 };
     execv(argv0, args);
     abort();
   } else if (from_p > 0) {
@@ -452,7 +453,7 @@ int main(int argc, char ** argv) {
   crc_init();
 
   if (argc == 3 && 0 == strcmp("--from", argv[1])) {
-    recurse_files(argv[2], argv[2]);
+    recurse_files(argv[2], argv[2], process_path);
     return 0;
   }
   if (argc == 3 && 0 == strcmp("--to", argv[1])) {
@@ -461,7 +462,7 @@ int main(int argc, char ** argv) {
   }
 
   if (argc == 5 && 0 == strcmp("--from", argv[1]) && 0 == strcmp("--to", argv[3])) {
-    return pipe_from_to(argv[0], argv[2], argv[4]);
+    return pipe_a_b(argv[0], "--from", argv[2], argv[4]);
   }
 
   usage(argv[0]);
